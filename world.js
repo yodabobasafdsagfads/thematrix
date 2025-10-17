@@ -3,35 +3,59 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.m
 let scene, camera, renderer;
 let humans = [];
 let keys = {};
+let velocity = new THREE.Vector3();
 let clock = new THREE.Clock();
 let yaw = 0, pitch = 0;
 let isPointerLocked = false;
 const raycaster = new THREE.Raycaster();
-let playerEntity;
+let playerEntity; // the AI-visible player
 
 const SKYBOX_HALF = 250;
 
-// --- Control Panel ---
+// --- Control Panel GUI ---
 const controlPanel = document.createElement("div");
 controlPanel.style.position = "absolute";
-controlPanel.style.top = "130px"; 
+controlPanel.style.top = "130px"; // below simulation status
 controlPanel.style.right = "10px";
 controlPanel.style.width = "250px";
 controlPanel.style.fontFamily = "monospace";
 controlPanel.style.fontSize = "14px";
 controlPanel.style.color = "#ffffff";
-controlPanel.style.pointerEvents = "auto"; 
+controlPanel.style.pointerEvents = "auto"; // allow clicking if buttons added
 controlPanel.style.backgroundColor = "rgba(0,0,0,0.5)";
 controlPanel.style.padding = "8px";
 controlPanel.style.borderRadius = "5px";
 document.body.appendChild(controlPanel);
+
+// Add controls (instructions/buttons)
 controlPanel.innerHTML = `
     <b>Controls</b><br>
     Bring All Humans: Press <b>M</b><br>
     Reset Humans: Press <b>R</b><br>
 `;
 
-// --- Event Log ---
+// Keyboard handlers for control panel actions
+document.addEventListener("keydown", (e) => {
+    const key = e.key.toLowerCase();
+    if (key === "m") {
+        humans.forEach(h => {
+            h.position.copy(camera.position).add(new THREE.Vector3(
+                (Math.random() - 0.5) * 5,
+                0,
+                (Math.random() - 0.5) * 5
+            ));
+        });
+        addEvent({ userData: { name: "SYSTEM" }, position: camera.position }, "All humans brought to player");
+    }
+    if (key === "r") {
+        humans.forEach(h => {
+            h.position.set((Math.random() - 0.5) * 100, 1, (Math.random() - 0.5) * 100);
+        });
+        addEvent({ userData: { name: "SYSTEM" }, position: camera.position }, "Humans reset to random positions");
+    }
+});
+
+// --- Event Log Setup ---
 const eventLogContainer = document.createElement("div");
 eventLogContainer.style.position = "absolute";
 eventLogContainer.style.top = "10px";
@@ -47,6 +71,7 @@ document.body.appendChild(eventLogContainer);
 
 const eventLog = [];
 const maxEvents = 20;
+
 function addEvent(human, thought) {
     const pos = human.position;
     const text = `${human.userData.name} @ (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}): "${thought}"`;
@@ -63,6 +88,7 @@ function addEvent(human, thought) {
     });
 
     eventLog.unshift(div);
+
     if (eventLog.length > maxEvents) {
         const old = eventLog.pop();
         old.style.transition = "all 0.5s ease-in";
@@ -72,7 +98,7 @@ function addEvent(human, thought) {
     }
 }
 
-// --- Simulation Status ---
+// --- Simulation Status GUI ---
 const simStatusContainer = document.createElement("div");
 simStatusContainer.style.position = "absolute";
 simStatusContainer.style.top = "10px";
@@ -100,112 +126,40 @@ function updateSimStatus() {
     `;
 }
 
-// --- 2D Matrix Rain Overlay ---
-const rainCanvas = document.createElement("canvas");
-const rainCtx = rainCanvas.getContext("2d");
-rainCanvas.style.position = "absolute";
-rainCanvas.style.top = 0;
-rainCanvas.style.left = 0;
-rainCanvas.style.width = "100%";
-rainCanvas.style.height = "100%";
-rainCanvas.style.pointerEvents = "none";
-document.body.appendChild(rainCanvas);
-
-let rainColumns = [];
-function initRain() {
-    rainCanvas.width = window.innerWidth;
-    rainCanvas.height = window.innerHeight;
-    const columns = Math.floor(rainCanvas.width / 20);
-    rainColumns = [];
-    for (let i = 0; i < columns; i++) rainColumns.push(Math.random() * -1000);
-}
-initRain();
-window.addEventListener("resize", initRain);
-
-function drawRain() {
-    rainCtx.fillStyle = "rgba(0,0,0,0.05)";
-    rainCtx.fillRect(0, 0, rainCanvas.width, rainCanvas.height);
-    rainCtx.fillStyle = "#00ff00";
-    rainCtx.font = "20px monospace";
-
-    for (let i = 0; i < rainColumns.length; i++) {
-        const text = Math.random() > 0.5 ? "1" : "0";
-        rainCtx.fillText(text, i * 20, rainColumns[i]);
-        rainColumns[i] += 20;
-        if (rainColumns[i] > rainCanvas.height) rainColumns[i] = Math.random() * -1000;
-    }
-}
-
-// --- 3D Matrix Rain ---
-let rainParticles, rainPositions;
-const RAIN_COUNT = 2000;
-
-function initRain3D() {
-    rainPositions = new Float32Array(RAIN_COUNT * 3);
-    for (let i = 0; i < RAIN_COUNT; i++) {
-        rainPositions[i*3] = (Math.random() - 0.5) * 200;
-        rainPositions[i*3 + 1] = Math.random() * 200;
-        rainPositions[i*3 + 2] = (Math.random() - 0.5) * 200;
-    }
-
-    const rainGeometry = new THREE.BufferGeometry();
-    rainGeometry.setAttribute("position", new THREE.BufferAttribute(rainPositions, 3));
-    const rainMaterial = new THREE.PointsMaterial({
-        color: 0x00ff00,
-        size: 1.5,
-        transparent: true,
-        opacity: 0.7
-    });
-    rainParticles = new THREE.Points(rainGeometry, rainMaterial);
-    scene.add(rainParticles);
-}
-
-function updateRain3D() {
-    if (!rainParticles) return;
-    const positions = rainParticles.geometry.attributes.position.array;
-    for (let i = 0; i < RAIN_COUNT; i++) {
-        positions[i*3 + 1] -= 2;
-        if (positions[i*3 + 1] < 0) {
-            positions[i*3 + 1] = 200;
-            positions[i*3] = camera.position.x + (Math.random() - 0.5) * 200;
-            positions[i*3 + 2] = camera.position.z + (Math.random() - 0.5) * 200;
-        }
-    }
-    rainParticles.geometry.attributes.position.needsUpdate = true;
-    rainParticles.position.x = camera.position.x;
-    rainParticles.position.z = camera.position.z;
-}
-
-// --- Init Three.js Scene ---
 init();
 animate();
 
 function init() {
+    // Renderer
     renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("matrixCanvas") });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
+    // Scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
 
-    // Skybox
-    const canvasSky = document.createElement("canvas");
-    canvasSky.width = canvasSky.height = 512;
-    const ctxSky = canvasSky.getContext("2d");
-    ctxSky.fillStyle = "black";
-    ctxSky.fillRect(0, 0, 512, 512);
-    ctxSky.font = "20px monospace";
+    // === Matrix Skybox ===
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 512;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.font = "20px monospace";
     for (let i = 0; i < 400; i++) {
-        ctxSky.fillStyle = Math.random() > 0.5 ? "#00ff00" : "#009900";
-        ctxSky.fillText(Math.random() > 0.5 ? "1" : "0", Math.random() * 512, Math.random() * 512);
+        ctx.fillStyle = Math.random() > 0.5 ? "#00ff00" : "#009900";
+        ctx.fillText(Math.random() > 0.5 ? "1" : "0", Math.random() * 512, Math.random() * 512);
     }
-    const texture = new THREE.CanvasTexture(canvasSky);
+    const texture = new THREE.CanvasTexture(canvas);
     const skyGeo = new THREE.BoxGeometry(500, 500, 500);
     const skyMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
-    scene.add(new THREE.Mesh(skyGeo, skyMat));
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    scene.add(sky);
 
+    // Camera
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 2, 5);
 
+    // Ground
     const plane = new THREE.Mesh(
         new THREE.PlaneGeometry(200, 200),
         new THREE.MeshBasicMaterial({ color: 0x003300, wireframe: true })
@@ -213,6 +167,7 @@ function init() {
     plane.rotation.x = -Math.PI / 2;
     scene.add(plane);
 
+    // Player Entity
     playerEntity = new THREE.Mesh(
         new THREE.BoxGeometry(1, 2, 1),
         new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true })
@@ -220,6 +175,7 @@ function init() {
     playerEntity.position.copy(camera.position);
     scene.add(playerEntity);
 
+    // Humans
     const geo = new THREE.BoxGeometry(1, 2, 1);
     for (let i = 0; i < 20; i++) {
         const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true });
@@ -258,14 +214,13 @@ function init() {
         camera.rotation.x = pitch;
     });
 
+    // Keyboard
     document.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
     document.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
     window.addEventListener("resize", onWindowResize);
-
-    initRain3D();
 }
 
-// --- Thought Sprites ---
+// --- Thought sprite helpers ---
 function createThoughtSprite(text) {
     const canvas = document.createElement("canvas");
     canvas.width = 256; canvas.height = 64;
@@ -297,21 +252,22 @@ function updateThoughtSprite(sprite, text) {
     sprite.material.map.needsUpdate = true;
 }
 
-// --- Resize ---
+// --- Window resize ---
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-    initRain();
 }
 
-// --- Animate ---
+// --- Animate loop ---
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
+    // Move player entity
     playerEntity.position.copy(camera.position);
 
+    // Player movement
     const speed = 20 * delta;
     const direction = new THREE.Vector3();
     if (keys["w"]) direction.z -= 1;
@@ -323,16 +279,18 @@ function animate() {
     move.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
     camera.position.addScaledVector(move, speed);
 
-    let inOuterVoid = false;
-
+    // Humans: movement, thinking, perception, outer void
     humans.forEach(h => {
         h.userData.timer += delta;
-        if (h.userData.timer > 2) { h.userData.timer = 0; think(h); }
+        if (h.userData.timer > 2) {
+            h.userData.timer = 0;
+            think(h);
+        }
+
         perceive(h);
 
-        let outside = Math.abs(h.position.x) > SKYBOX_HALF ||
-                      Math.abs(h.position.y) > SKYBOX_HALF ||
-                      Math.abs(h.position.z) > SKYBOX_HALF;
+        // --- Outer Void mechanics ---
+        let outside = Math.abs(h.position.x) > SKYBOX_HALF || Math.abs(h.position.y) > SKYBOX_HALF || Math.abs(h.position.z) > SKYBOX_HALF;
         if (outside && !h.userData.free) {
             h.userData.selfAware += 0.01;
             h.userData.dir.add(new THREE.Vector3(
@@ -341,12 +299,15 @@ function animate() {
                 h.position.z > SKYBOX_HALF ? -1 : h.position.z < -SKYBOX_HALF ? 1 : 0
             ).multiplyScalar(5 * (1 - h.userData.selfAware))).normalize();
 
+            // Visual red glow for rebellion
             h.material.color.setHSL(0, 1, 0.5 + 0.5 * h.userData.selfAware);
+
+            // 1 and 0 visual effect
             h.material.wireframe = true;
 
             if (Math.random() < 0.01) addEvent(h, "I fight my programming!");
-            inOuterVoid = true;
         } else {
+            // Fully inside
             h.userData.selfAware = Math.max(0, h.userData.selfAware - 0.002);
             h.material.color.setHSL(0.4, 1, 0.5);
             h.material.wireframe = false;
@@ -356,20 +317,8 @@ function animate() {
         updateThoughtSprite(h.userData.thoughtSprite, h.userData.belief);
     });
 
-    if (Math.abs(camera.position.x) > SKYBOX_HALF ||
-        Math.abs(camera.position.y) > SKYBOX_HALF ||
-        Math.abs(camera.position.z) > SKYBOX_HALF) {
-        inOuterVoid = true;
-    }
-
-    if (inOuterVoid) {
-        drawRain();
-        updateRain3D();
-    } else {
-        rainCtx.clearRect(0, 0, rainCanvas.width, rainCanvas.height);
-    }
-
     updateSimStatus();
+
     renderer.render(scene, camera);
 }
 
@@ -377,11 +326,13 @@ function animate() {
 function perceive(human) {
     let seesSomething = false;
     const objectsToSee = [...humans, playerEntity];
+
     objectsToSee.forEach(other => {
         if (other === human) return;
         const dirToOther = new THREE.Vector3().subVectors(other.position, human.position);
         const dist = dirToOther.length();
         if (dist > human.userData.visionRange) return;
+
         dirToOther.normalize();
         const angle = human.userData.dir.angleTo(dirToOther);
         if (angle < human.userData.fov / 2) {
@@ -394,6 +345,7 @@ function perceive(human) {
             }
         }
     });
+
     if (!seesSomething) {
         human.userData.awareness = Math.max(0, human.userData.awareness - 0.05);
         human.material.color.setHSL(0.4, 1, 0.3 + 0.5 * human.userData.awareness);
@@ -417,5 +369,6 @@ function think(human) {
     human.userData.thoughts.push(thought);
     human.userData.belief = thought;
     human.userData.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * Math.PI / 2);
+
     addEvent(human, thought);
 }
