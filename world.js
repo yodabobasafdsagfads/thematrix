@@ -6,6 +6,10 @@ let keys = {};
 let velocity = new THREE.Vector3();
 let clock = new THREE.Clock();
 
+let yaw = 0; // camera rotation
+let pitch = 0;
+let isPointerLocked = false;
+
 init();
 animate();
 
@@ -15,7 +19,25 @@ function init() {
   
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
-  
+
+  // === Matrix Skybox ===
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, 512, 512);
+  ctx.font = "20px monospace";
+  for (let i = 0; i < 400; i++) {
+    ctx.fillStyle = Math.random() > 0.5 ? "#00ff00" : "#009900";
+    ctx.fillText(Math.random() > 0.5 ? "1" : "0", Math.random() * 512, Math.random() * 512);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  const skyGeo = new THREE.BoxGeometry(500, 500, 500);
+  const skyMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
+  const sky = new THREE.Mesh(skyGeo, skyMat);
+  scene.add(sky);
+
+  // Camera
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   camera.position.set(0, 2, 5);
 
@@ -45,6 +67,27 @@ function init() {
     scene.add(h);
   }
 
+  // === Mouse look ===
+  const canvasElement = document.getElementById("matrixCanvas");
+  canvasElement.addEventListener("click", () => {
+    canvasElement.requestPointerLock();
+  });
+
+  document.addEventListener("pointerlockchange", () => {
+    isPointerLocked = document.pointerLockElement === canvasElement;
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!isPointerLocked) return;
+    const sensitivity = 0.002;
+    yaw -= e.movementX * sensitivity;
+    pitch -= e.movementY * sensitivity;
+    pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
+    camera.rotation.order = "YXZ";
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+  });
+
   // Controls
   document.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
   document.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
@@ -63,16 +106,16 @@ function animate() {
 
   // Player movement
   const speed = 20 * delta;
-  if (keys["w"]) velocity.z = -speed;
-  else if (keys["s"]) velocity.z = speed;
-  else velocity.z = 0;
+  const direction = new THREE.Vector3();
+  if (keys["w"]) direction.z -= 1;
+  if (keys["s"]) direction.z += 1;
+  if (keys["a"]) direction.x -= 1;
+  if (keys["d"]) direction.x += 1;
 
-  if (keys["a"]) velocity.x = -speed;
-  else if (keys["d"]) velocity.x = speed;
-  else velocity.x = 0;
-
-  camera.translateX(velocity.x);
-  camera.translateZ(velocity.z);
+  direction.normalize();
+  const move = new THREE.Vector3(direction.x, 0, direction.z);
+  move.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  camera.position.addScaledVector(move, speed);
 
   // AI: update "thoughts" and movement
   humans.forEach(h => {
@@ -99,12 +142,7 @@ function think(human) {
   const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
   human.userData.thoughts.push(thought);
   human.userData.belief = thought;
-  
-  // Random direction change based on "will"
   human.userData.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * Math.PI / 2);
 
-  // Occasionally log one to console
-  if (Math.random() < 0.3) {
-    console.log(`${human.userData.name}: "${human.userData.belief}"`);
-  }
+  if (Math.random() < 0.3) console.log(`${human.userData.name}: "${human.userData.belief}"`);
 }
