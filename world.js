@@ -53,6 +53,34 @@ function addEvent(human, thought) {
     }
 }
 
+// --- Simulation Status GUI ---
+const simStatusContainer = document.createElement("div");
+simStatusContainer.style.position = "absolute";
+simStatusContainer.style.top = "10px";
+simStatusContainer.style.right = "10px";
+simStatusContainer.style.width = "250px";
+simStatusContainer.style.fontFamily = "monospace";
+simStatusContainer.style.fontSize = "14px";
+simStatusContainer.style.color = "#00ffff";
+simStatusContainer.style.pointerEvents = "none";
+simStatusContainer.style.backgroundColor = "rgba(0,0,0,0.5)";
+simStatusContainer.style.padding = "8px";
+simStatusContainer.style.borderRadius = "5px";
+document.body.appendChild(simStatusContainer);
+
+function updateSimStatus() {
+    const awareHumans = humans.filter(h => h.userData.awareness > 0.5).length;
+    const pos = camera.position;
+    const fps = Math.round(1 / clock.getDelta());
+    simStatusContainer.innerHTML = `
+        <b>Simulation Status</b><br>
+        Humans: ${humans.length}<br>
+        Aware Humans: ${awareHumans}<br>
+        Player Position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})<br>
+        FPS: ${fps}
+    `;
+}
+
 init();
 animate();
 
@@ -60,7 +88,7 @@ function init() {
     // Renderer
     renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("matrixCanvas") });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    
+
     // Scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
@@ -214,6 +242,8 @@ function animate() {
         updateThoughtSprite(h.userData.thoughtSprite, h.userData.belief);
     });
 
+    updateSimStatus(); // <-- Update Simulation GUI
+
     renderer.render(scene, camera);
 }
 
@@ -236,7 +266,6 @@ function perceive(human) {
                 seesSomething = true;
                 human.userData.awareness = Math.min(human.userData.awareness + 0.1, 1);
                 human.material.color.setHSL(0.4, 1, 0.5 + 0.5 * human.userData.awareness);
-                if (Math.random() < 0.1) console.log(`${human.userData.name}: "I see ${other === playerEntity ? 'Player' : other.userData.name}"`);
             }
         }
     });
@@ -265,6 +294,4 @@ function think(human) {
     human.userData.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * Math.PI / 2);
 
     addEvent(human, thought);
-
-    if (Math.random() < 0.3) console.log(`${human.userData.name}: "${human.userData.belief}"`);
 }
