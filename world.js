@@ -7,11 +7,11 @@ let clock = new THREE.Clock();
 let yaw = 0, pitch = 0;
 let isPointerLocked = false;
 const raycaster = new THREE.Raycaster();
-let playerEntity; // AI-visible player
+let playerEntity;
 
 const SKYBOX_HALF = 250;
 
-// --- Control Panel GUI ---
+// --- Control Panel ---
 const controlPanel = document.createElement("div");
 controlPanel.style.position = "absolute";
 controlPanel.style.top = "130px"; 
@@ -30,25 +30,6 @@ controlPanel.innerHTML = `
     Bring All Humans: Press <b>M</b><br>
     Reset Humans: Press <b>R</b><br>
 `;
-
-// Keyboard actions
-document.addEventListener("keydown", (e) => {
-    const key = e.key.toLowerCase();
-    if (key === "m") {
-        humans.forEach(h => {
-            h.position.copy(camera.position).add(new THREE.Vector3(
-                (Math.random() - 0.5) * 5, 0, (Math.random() - 0.5) * 5
-            ));
-        });
-        addEvent({ userData: { name: "SYSTEM" }, position: camera.position }, "All humans brought to player");
-    }
-    if (key === "r") {
-        humans.forEach(h => {
-            h.position.set((Math.random() - 0.5) * 100, 1, (Math.random() - 0.5) * 100);
-        });
-        addEvent({ userData: { name: "SYSTEM" }, position: camera.position }, "Humans reset to random positions");
-    }
-});
 
 // --- Event Log ---
 const eventLogContainer = document.createElement("div");
@@ -91,7 +72,7 @@ function addEvent(human, thought) {
     }
 }
 
-// --- Simulation Status GUI ---
+// --- Simulation Status ---
 const simStatusContainer = document.createElement("div");
 simStatusContainer.style.position = "absolute";
 simStatusContainer.style.top = "10px";
@@ -119,7 +100,7 @@ function updateSimStatus() {
     `;
 }
 
-// --- Matrix Rain Overlay ---
+// --- 2D Matrix Rain Overlay ---
 const rainCanvas = document.createElement("canvas");
 const rainCtx = rainCanvas.getContext("2d");
 rainCanvas.style.position = "absolute";
@@ -136,9 +117,7 @@ function initRain() {
     rainCanvas.height = window.innerHeight;
     const columns = Math.floor(rainCanvas.width / 20);
     rainColumns = [];
-    for (let i = 0; i < columns; i++) {
-        rainColumns.push(Math.random() * -1000);
-    }
+    for (let i = 0; i < columns; i++) rainColumns.push(Math.random() * -1000);
 }
 initRain();
 window.addEventListener("resize", initRain);
@@ -157,41 +136,76 @@ function drawRain() {
     }
 }
 
+// --- 3D Matrix Rain ---
+let rainParticles, rainPositions;
+const RAIN_COUNT = 2000;
+
+function initRain3D() {
+    rainPositions = new Float32Array(RAIN_COUNT * 3);
+    for (let i = 0; i < RAIN_COUNT; i++) {
+        rainPositions[i*3] = (Math.random() - 0.5) * 200;
+        rainPositions[i*3 + 1] = Math.random() * 200;
+        rainPositions[i*3 + 2] = (Math.random() - 0.5) * 200;
+    }
+
+    const rainGeometry = new THREE.BufferGeometry();
+    rainGeometry.setAttribute("position", new THREE.BufferAttribute(rainPositions, 3));
+    const rainMaterial = new THREE.PointsMaterial({
+        color: 0x00ff00,
+        size: 1.5,
+        transparent: true,
+        opacity: 0.7
+    });
+    rainParticles = new THREE.Points(rainGeometry, rainMaterial);
+    scene.add(rainParticles);
+}
+
+function updateRain3D() {
+    if (!rainParticles) return;
+    const positions = rainParticles.geometry.attributes.position.array;
+    for (let i = 0; i < RAIN_COUNT; i++) {
+        positions[i*3 + 1] -= 2;
+        if (positions[i*3 + 1] < 0) {
+            positions[i*3 + 1] = 200;
+            positions[i*3] = camera.position.x + (Math.random() - 0.5) * 200;
+            positions[i*3 + 2] = camera.position.z + (Math.random() - 0.5) * 200;
+        }
+    }
+    rainParticles.geometry.attributes.position.needsUpdate = true;
+    rainParticles.position.x = camera.position.x;
+    rainParticles.position.z = camera.position.z;
+}
+
 // --- Init Three.js Scene ---
 init();
 animate();
 
 function init() {
-    // Renderer
     renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("matrixCanvas") });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-    // Scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
 
     // Skybox
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 512;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, 512, 512);
-    ctx.font = "20px monospace";
+    const canvasSky = document.createElement("canvas");
+    canvasSky.width = canvasSky.height = 512;
+    const ctxSky = canvasSky.getContext("2d");
+    ctxSky.fillStyle = "black";
+    ctxSky.fillRect(0, 0, 512, 512);
+    ctxSky.font = "20px monospace";
     for (let i = 0; i < 400; i++) {
-        ctx.fillStyle = Math.random() > 0.5 ? "#00ff00" : "#009900";
-        ctx.fillText(Math.random() > 0.5 ? "1" : "0", Math.random() * 512, Math.random() * 512);
+        ctxSky.fillStyle = Math.random() > 0.5 ? "#00ff00" : "#009900";
+        ctxSky.fillText(Math.random() > 0.5 ? "1" : "0", Math.random() * 512, Math.random() * 512);
     }
-    const texture = new THREE.CanvasTexture(canvas);
+    const texture = new THREE.CanvasTexture(canvasSky);
     const skyGeo = new THREE.BoxGeometry(500, 500, 500);
     const skyMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
-    const sky = new THREE.Mesh(skyGeo, skyMat);
-    scene.add(sky);
+    scene.add(new THREE.Mesh(skyGeo, skyMat));
 
-    // Camera
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 2, 5);
 
-    // Ground
     const plane = new THREE.Mesh(
         new THREE.PlaneGeometry(200, 200),
         new THREE.MeshBasicMaterial({ color: 0x003300, wireframe: true })
@@ -199,7 +213,6 @@ function init() {
     plane.rotation.x = -Math.PI / 2;
     scene.add(plane);
 
-    // Player
     playerEntity = new THREE.Mesh(
         new THREE.BoxGeometry(1, 2, 1),
         new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true })
@@ -207,7 +220,6 @@ function init() {
     playerEntity.position.copy(camera.position);
     scene.add(playerEntity);
 
-    // Humans
     const geo = new THREE.BoxGeometry(1, 2, 1);
     for (let i = 0; i < 20; i++) {
         const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true });
@@ -246,10 +258,11 @@ function init() {
         camera.rotation.x = pitch;
     });
 
-    // Keyboard
     document.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
     document.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
     window.addEventListener("resize", onWindowResize);
+
+    initRain3D();
 }
 
 // --- Thought Sprites ---
@@ -317,7 +330,6 @@ function animate() {
         if (h.userData.timer > 2) { h.userData.timer = 0; think(h); }
         perceive(h);
 
-        // --- Outer Void ---
         let outside = Math.abs(h.position.x) > SKYBOX_HALF ||
                       Math.abs(h.position.y) > SKYBOX_HALF ||
                       Math.abs(h.position.z) > SKYBOX_HALF;
@@ -344,16 +356,18 @@ function animate() {
         updateThoughtSprite(h.userData.thoughtSprite, h.userData.belief);
     });
 
-    // Check if player is outside
     if (Math.abs(camera.position.x) > SKYBOX_HALF ||
         Math.abs(camera.position.y) > SKYBOX_HALF ||
         Math.abs(camera.position.z) > SKYBOX_HALF) {
         inOuterVoid = true;
     }
 
-    // Draw rain if in outer void
-    if (inOuterVoid) drawRain();
-    else rainCtx.clearRect(0, 0, rainCanvas.width, rainCanvas.height);
+    if (inOuterVoid) {
+        drawRain();
+        updateRain3D();
+    } else {
+        rainCtx.clearRect(0, 0, rainCanvas.width, rainCanvas.height);
+    }
 
     updateSimStatus();
     renderer.render(scene, camera);
