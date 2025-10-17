@@ -24,39 +24,45 @@ function init() {
 
     // Camera
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 5, 20);
+    camera.position.set(0, 3, 15);
+    camera.lookAt(0, 0, 0);
 
-    // Pointer lock controls
+    // Controls
     controls = new PointerLockControls(camera, document.body);
     document.body.addEventListener("click", () => controls.lock());
 
-    // Ground
+    // World + Humans
     createWorld();
-
-    // Humans
     createHumans(20);
 
-    // Keyboard input
-    document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-    document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+    // Debug cube (always visible)
+    const cube = new THREE.Mesh(
+        new THREE.BoxGeometry(2, 2, 2),
+        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    );
+    cube.position.set(0, 1, 0);
+    scene.add(cube);
 
-    // Window resize
+    // Events
+    document.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
+    document.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
     window.addEventListener("resize", onWindowResize);
 
     // GUI
     gui = new GUI();
-    gui.add({ void: toggleVoid }, "void").name("Go to The Void");
+    gui.add({ toggleVoid }, "toggleVoid").name("Enter The Void");
 }
 
-// Create world
 function createWorld() {
+    // Ground plane
     const plane = new THREE.Mesh(
         new THREE.PlaneGeometry(200, 200),
-        new THREE.MeshBasicMaterial({ color: 0x003300, wireframe: true })
+        new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true })
     );
     plane.rotation.x = -Math.PI / 2;
     scene.add(plane);
 
+    // Sky box
     const sky = new THREE.Mesh(
         new THREE.BoxGeometry(500, 500, 500),
         new THREE.MeshBasicMaterial({ color: 0x101010, side: THREE.BackSide })
@@ -64,14 +70,13 @@ function createWorld() {
     scene.add(sky);
 }
 
-// Create AI humans
 function createHumans(count) {
     const geo = new THREE.BoxGeometry(1, 2, 1);
     const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true });
 
     for (let i = 0; i < count; i++) {
         const h = new THREE.Mesh(geo, mat);
-        h.position.set((Math.random() - 0.5) * 40, 1, (Math.random() - 0.5) * 40);
+        h.position.set((Math.random() - 0.5) * 10, 1, (Math.random() - 0.5) * 10);
         h.userData = {
             id: i,
             name: `Human_${i}`,
@@ -85,7 +90,6 @@ function createHumans(count) {
     }
 }
 
-// Toggle Void mode
 function toggleVoid() {
     isVoid = !isVoid;
     if (isVoid) {
@@ -101,14 +105,12 @@ function toggleVoid() {
     }
 }
 
-// Resize handler
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Player movement
 function movePlayer(delta) {
     if (!controls.isLocked) return;
     const speed = 10 * delta;
@@ -122,36 +124,35 @@ function movePlayer(delta) {
     controls.moveForward(dir.z * speed);
 }
 
-// NPC wandering + thinking
 function wanderHuman(h, delta) {
     h.userData.timer += delta;
     if (h.userData.timer > 2) {
         h.userData.timer = 0;
 
-        // Change direction slightly
-        h.userData.dir.applyAxisAngle(new THREE.Vector3(0,1,0), (Math.random()-0.5) * Math.PI/2);
+        // Slight turn
+        h.userData.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * Math.PI / 2);
 
-        // Generate a new thought
+        // Generate new thought
         const thoughts = [
             "I exist.",
             "I am human.",
             "Why am I walking?",
             "Is someone watching?",
             "I must keep moving.",
-            "Am I real?"
+            "Am I real?",
+            "Do I have purpose?",
+            "Maybe I am code."
         ];
         const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
         h.userData.belief = thought;
         h.userData.thoughts.push(thought);
 
-        // Occasionally log
         if (Math.random() < 0.3) console.log(`${h.userData.name}: "${thought}"`);
     }
 
     h.position.addScaledVector(h.userData.dir, delta * 5);
 }
 
-// Animate
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
