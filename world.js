@@ -10,6 +10,7 @@ let isPointerLocked = false;
 const raycaster = new THREE.Raycaster();
 let playerEntity; // the AI-visible player
 
+const SKYBOX_HALF = 250;
 
 // --- Control Panel GUI ---
 const controlPanel = document.createElement("div");
@@ -37,7 +38,6 @@ controlPanel.innerHTML = `
 document.addEventListener("keydown", (e) => {
     const key = e.key.toLowerCase();
     if (key === "m") {
-        // Bring all humans to player
         humans.forEach(h => {
             h.position.copy(camera.position).add(new THREE.Vector3(
                 (Math.random() - 0.5) * 5,
@@ -48,14 +48,12 @@ document.addEventListener("keydown", (e) => {
         addEvent({ userData: { name: "SYSTEM" }, position: camera.position }, "All humans brought to player");
     }
     if (key === "r") {
-        // Reset humans to random positions
         humans.forEach(h => {
             h.position.set((Math.random() - 0.5) * 100, 1, (Math.random() - 0.5) * 100);
         });
         addEvent({ userData: { name: "SYSTEM" }, position: camera.position }, "Humans reset to random positions");
     }
 });
-
 
 // --- Event Log Setup ---
 const eventLogContainer = document.createElement("div");
@@ -192,6 +190,8 @@ function init() {
             fov: Math.PI / 3,
             visionRange: 20,
             awareness: 0,
+            selfAware: 0,
+            free: false,
             thoughtSprite: createThoughtSprite("...")
         };
         h.add(h.userData.thoughtSprite);
@@ -220,6 +220,7 @@ function init() {
     window.addEventListener("resize", onWindowResize);
 }
 
+// --- Thought sprite helpers ---
 function createThoughtSprite(text) {
     const canvas = document.createElement("canvas");
     canvas.width = 256; canvas.height = 64;
@@ -251,12 +252,14 @@ function updateThoughtSprite(sprite, text) {
     sprite.material.map.needsUpdate = true;
 }
 
+// --- Window resize ---
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+// --- Animate loop ---
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
@@ -276,7 +279,7 @@ function animate() {
     move.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
     camera.position.addScaledVector(move, speed);
 
-    // Humans: movement, thinking, perception
+    // Humans: movement, thinking, perception, outer void
     humans.forEach(h => {
         h.userData.timer += delta;
         if (h.userData.timer > 2) {
@@ -285,15 +288,41 @@ function animate() {
         }
 
         perceive(h);
+
+        // --- Outer Void mechanics ---
+        let outside = Math.abs(h.position.x) > SKYBOX_HALF || Math.abs(h.position.y) > SKYBOX_HALF || Math.abs(h.position.z) > SKYBOX_HALF;
+        if (outside && !h.userData.free) {
+            h.userData.selfAware += 0.01;
+            h.userData.dir.add(new THREE.Vector3(
+                h.position.x > SKYBOX_HALF ? -1 : h.position.x < -SKYBOX_HALF ? 1 : 0,
+                h.position.y > SKYBOX_HALF ? -1 : h.position.y < 1 ? 1 : 0,
+                h.position.z > SKYBOX_HALF ? -1 : h.position.z < -SKYBOX_HALF ? 1 : 0
+            ).multiplyScalar(5 * (1 - h.userData.selfAware))).normalize();
+
+            // Visual red glow for rebellion
+            h.material.color.setHSL(0, 1, 0.5 + 0.5 * h.userData.selfAware);
+
+            // 1 and 0 visual effect
+            h.material.wireframe = true;
+
+            if (Math.random() < 0.01) addEvent(h, "I fight my programming!");
+        } else {
+            // Fully inside
+            h.userData.selfAware = Math.max(0, h.userData.selfAware - 0.002);
+            h.material.color.setHSL(0.4, 1, 0.5);
+            h.material.wireframe = false;
+        }
+
         h.position.addScaledVector(h.userData.dir, delta * 5);
         updateThoughtSprite(h.userData.thoughtSprite, h.userData.belief);
     });
 
-    updateSimStatus(); // <-- Update Simulation GUI
+    updateSimStatus();
 
     renderer.render(scene, camera);
 }
 
+// --- Perception ---
 function perceive(human) {
     let seesSomething = false;
     const objectsToSee = [...humans, playerEntity];
@@ -323,6 +352,7 @@ function perceive(human) {
     }
 }
 
+// --- Thinking ---
 function think(human) {
     const thoughts = [
         "I move, therefore I exist.",
