@@ -10,6 +10,53 @@ let isPointerLocked = false;
 const raycaster = new THREE.Raycaster();
 let playerEntity; // the AI-visible player
 
+
+// --- Control Panel GUI ---
+const controlPanel = document.createElement("div");
+controlPanel.style.position = "absolute";
+controlPanel.style.top = "130px"; // below simulation status
+controlPanel.style.right = "10px";
+controlPanel.style.width = "250px";
+controlPanel.style.fontFamily = "monospace";
+controlPanel.style.fontSize = "14px";
+controlPanel.style.color = "#ffffff";
+controlPanel.style.pointerEvents = "auto"; // allow clicking if buttons added
+controlPanel.style.backgroundColor = "rgba(0,0,0,0.5)";
+controlPanel.style.padding = "8px";
+controlPanel.style.borderRadius = "5px";
+document.body.appendChild(controlPanel);
+
+// Add controls (instructions/buttons)
+controlPanel.innerHTML = `
+    <b>Controls</b><br>
+    Bring All Humans: Press <b>M</b><br>
+    Reset Humans: Press <b>R</b><br>
+`;
+
+// Keyboard handlers for control panel actions
+document.addEventListener("keydown", (e) => {
+    const key = e.key.toLowerCase();
+    if (key === "m") {
+        // Bring all humans to player
+        humans.forEach(h => {
+            h.position.copy(camera.position).add(new THREE.Vector3(
+                (Math.random() - 0.5) * 5,
+                0,
+                (Math.random() - 0.5) * 5
+            ));
+        });
+        addEvent({ userData: { name: "SYSTEM" }, position: camera.position }, "All humans brought to player");
+    }
+    if (key === "r") {
+        // Reset humans to random positions
+        humans.forEach(h => {
+            h.position.set((Math.random() - 0.5) * 100, 1, (Math.random() - 0.5) * 100);
+        });
+        addEvent({ userData: { name: "SYSTEM" }, position: camera.position }, "Humans reset to random positions");
+    }
+});
+
+
 // --- Event Log Setup ---
 const eventLogContainer = document.createElement("div");
 eventLogContainer.style.position = "absolute";
