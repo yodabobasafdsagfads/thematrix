@@ -2,9 +2,6 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.m
 import { PointerLockControls } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/controls/PointerLockControls.js";
 import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.18.1/dist/lil-gui.esm.js";
 
-// Make sure to include Socket.IO in HTML
-// <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-
 let scene, camera, renderer, controls;
 let humans = [];
 let keys = {};
@@ -49,18 +46,9 @@ function init() {
     // GUI
     gui = new GUI();
     gui.add({ void: toggleVoid }, "void").name("Go to The Void");
-
-    // Python backend connection
-    const socket = io("http://localhost:5000");
-    socket.on("ai_update", agents => {
-        agents.forEach(a => {
-            const h = humans[a.id];
-            if (h) h.userData.belief = a.belief;
-        });
-    });
 }
 
-// Create a basic world
+// Create world
 function createWorld() {
     const plane = new THREE.Mesh(
         new THREE.PlaneGeometry(200, 200),
@@ -69,7 +57,6 @@ function createWorld() {
     plane.rotation.x = -Math.PI / 2;
     scene.add(plane);
 
-    // Skybox or simple background
     const sky = new THREE.Mesh(
         new THREE.BoxGeometry(500, 500, 500),
         new THREE.MeshBasicMaterial({ color: 0x101010, side: THREE.BackSide })
@@ -77,10 +64,11 @@ function createWorld() {
     scene.add(sky);
 }
 
-// Create humans
+// Create AI humans
 function createHumans(count) {
     const geo = new THREE.BoxGeometry(1, 2, 1);
     const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true });
+
     for (let i = 0; i < count; i++) {
         const h = new THREE.Mesh(geo, mat);
         h.position.set((Math.random() - 0.5) * 40, 1, (Math.random() - 0.5) * 40);
@@ -97,7 +85,7 @@ function createHumans(count) {
     }
 }
 
-// Void toggle
+// Toggle Void mode
 function toggleVoid() {
     isVoid = !isVoid;
     if (isVoid) {
@@ -108,12 +96,12 @@ function toggleVoid() {
     } else {
         scene.background.set(0x000000);
         scene.children.forEach(c => {
-            if (c.isMesh) c.material.color.set(c.userData?.originalColor || 0x00ffcc);
+            if (c.isMesh && c.userData?.id !== undefined) c.material.color.set(0x00ffcc);
         });
     }
 }
 
-// Resize
+// Resize handler
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -134,13 +122,32 @@ function movePlayer(delta) {
     controls.moveForward(dir.z * speed);
 }
 
-// NPC wandering
+// NPC wandering + thinking
 function wanderHuman(h, delta) {
     h.userData.timer += delta;
     if (h.userData.timer > 2) {
         h.userData.timer = 0;
-        h.userData.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * Math.PI / 2);
+
+        // Change direction slightly
+        h.userData.dir.applyAxisAngle(new THREE.Vector3(0,1,0), (Math.random()-0.5) * Math.PI/2);
+
+        // Generate a new thought
+        const thoughts = [
+            "I exist.",
+            "I am human.",
+            "Why am I walking?",
+            "Is someone watching?",
+            "I must keep moving.",
+            "Am I real?"
+        ];
+        const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
+        h.userData.belief = thought;
+        h.userData.thoughts.push(thought);
+
+        // Occasionally log
+        if (Math.random() < 0.3) console.log(`${h.userData.name}: "${thought}"`);
     }
+
     h.position.addScaledVector(h.userData.dir, delta * 5);
 }
 
