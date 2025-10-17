@@ -77,6 +77,21 @@ function init() {
             thoughtSprite: createThoughtSprite("...") // initial empty thought
         };
         h.add(h.userData.thoughtSprite);
+
+        // Add direction arrow (visible only to player)
+        const arrow = new THREE.ArrowHelper(
+            h.userData.dir.clone().normalize(),
+            h.position.clone(),
+            3,
+            0x00ff00,
+            0.5,
+            0.3
+        );
+        arrow.material.transparent = true;
+        arrow.material.opacity = 0.6;
+        h.userData.dirArrow = arrow;
+        scene.add(arrow);
+
         humans.push(h);
         scene.add(h);
     }
@@ -168,17 +183,22 @@ function animate() {
             think(h);
         }
 
-        perceive(h); // includes the player
+        perceive(h); // AI vision including player
         h.position.addScaledVector(h.userData.dir, delta * 5);
 
         // Update thought sprite
         updateThoughtSprite(h.userData.thoughtSprite, h.userData.belief);
+
+        // Update direction arrow
+        h.userData.dirArrow.position.copy(h.position);
+        h.userData.dirArrow.setDirection(h.userData.dir.clone().normalize());
+        h.userData.dirArrow.material.opacity = 0.3 + 0.7 * h.userData.awareness;
     });
 
     renderer.render(scene, camera);
 }
 
-// AI Vision (sees humans + player)
+// AI Vision
 function perceive(human) {
     let seesSomething = false;
     const objectsToSee = [...humans, playerEntity];
