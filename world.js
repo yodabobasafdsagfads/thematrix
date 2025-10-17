@@ -22,6 +22,77 @@ function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
 
+// --- Event Log Setup ---
+const eventLogContainer = document.createElement("div");
+eventLogContainer.style.position = "absolute";
+eventLogContainer.style.top = "10px";
+eventLogContainer.style.left = "10px";
+eventLogContainer.style.width = "300px";
+eventLogContainer.style.maxHeight = "90vh";
+eventLogContainer.style.overflow = "hidden";
+eventLogContainer.style.fontFamily = "monospace";
+eventLogContainer.style.fontSize = "14px";
+eventLogContainer.style.color = "#00ff00";
+eventLogContainer.style.pointerEvents = "none";
+document.body.appendChild(eventLogContainer);
+
+const eventLog = []; // store current events
+const maxEvents = 20; // max events visible at once
+
+// --- Add an event ---
+function addEvent(human, thought) {
+    const pos = human.position;
+    const text = `${human.userData.name} @ (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}): "${thought}"`;
+    const div = document.createElement("div");
+    div.textContent = text;
+    div.style.opacity = 0;
+    div.style.transform = "translateY(-20px)";
+    div.style.transition = "all 0.5s ease-out";
+    eventLogContainer.prepend(div);
+
+    // Animate in
+    requestAnimationFrame(() => {
+        div.style.opacity = 1;
+        div.style.transform = "translateY(0)";
+    });
+
+    eventLog.unshift(div);
+
+    // Remove old events
+    if (eventLog.length > maxEvents) {
+        const old = eventLog.pop();
+        old.style.transition = "all 0.5s ease-in";
+        old.style.opacity = 0;
+        old.style.transform = "translateY(-20px)";
+        setTimeout(() => eventLogContainer.removeChild(old), 500);
+    }
+}
+
+// --- Update think() to log events ---
+function think(human) {
+    const thoughts = [
+        "I move, therefore I exist.",
+        "I think I am human.",
+        "Why do I always walk?",
+        "Is someone watching me?",
+        "Maybe I’m in a simulation.",
+        "I must keep moving to stay alive.",
+        "I see others who look like me.",
+        "I see the player.",
+        "I feel like the world is made of numbers."
+    ];
+    const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
+    human.userData.thoughts.push(thought);
+    human.userData.belief = thought;
+    human.userData.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * Math.PI / 2);
+
+    // Add to event log
+    addEvent(human, thought);
+
+    if (Math.random() < 0.3) console.log(`${human.userData.name}: "${human.userData.belief}"`);
+}
+
+
     // === Matrix Skybox ===
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 512;
