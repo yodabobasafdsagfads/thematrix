@@ -1,5 +1,8 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
 
+// Make sure to include Socket.IO in your HTML:
+// <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
 let scene, camera, renderer;
 let humans = [];
 let keys = {};
@@ -35,6 +38,7 @@ function init() {
     const h = new THREE.Mesh(geo, mat);
     h.position.set((Math.random() - 0.5) * 100, 1, (Math.random() - 0.5) * 100);
     h.userData = {
+      id: i, // index to match Python backend
       name: `Human_${i}`,
       dir: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
       belief: "I am a human being.",
@@ -49,6 +53,19 @@ function init() {
   document.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
   document.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
   window.addEventListener("resize", onWindowResize);
+
+  // --- Connect to Python backend ---
+  const socket = io("http://localhost:5000"); // adjust if backend runs elsewhere
+  socket.on("ai_update", (agents) => {
+    agents.forEach(a => {
+      const h = humans[a.id];
+      if (h) {
+        h.userData.belief = a.belief;
+        // Optionally log to console
+        console.log(`${h.userData.name}: "${h.userData.belief}"`);
+      }
+    });
+  });
 }
 
 function onWindowResize() {
@@ -74,37 +91,16 @@ function animate() {
   camera.translateX(velocity.x);
   camera.translateZ(velocity.z);
 
-  // AI: update "thoughts" and movement
+  // AI: update movement (beliefs come from Python now)
   humans.forEach(h => {
     h.userData.timer += delta;
     if (h.userData.timer > 2) {
       h.userData.timer = 0;
-      think(h);
+      // Only update direction randomly; thoughts come from Python
+      h.userData.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * Math.PI / 2);
     }
     h.position.addScaledVector(h.userData.dir, delta * 5);
   });
 
   renderer.render(scene, camera);
-}
-
-function think(human) {
-  const thoughts = [
-    "I move, therefore I exist.",
-    "I think I am human.",
-    "Why do I always walk?",
-    "Is someone watching me?",
-    "Maybe I’m in a simulation.",
-    "I must keep moving to stay alive."
-  ];
-  const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
-  human.userData.thoughts.push(thought);
-  human.userData.belief = thought;
-  
-  // Random direction change based on "will"
-  human.userData.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * Math.PI / 2);
-
-  // Occasionally log one to console
-  if (Math.random() < 0.3) {
-    console.log(`${human.userData.name}: "${human.userData.belief}"`);
-  }
 }
