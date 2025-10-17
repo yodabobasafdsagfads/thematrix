@@ -10,18 +10,6 @@ let isPointerLocked = false;
 const raycaster = new THREE.Raycaster();
 let playerEntity; // the AI-visible player
 
-init();
-animate();
-
-function init() {
-    // Renderer
-    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("matrixCanvas") });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    
-    // Scene
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000);
-
 // --- Event Log Setup ---
 const eventLogContainer = document.createElement("div");
 eventLogContainer.style.position = "absolute";
@@ -36,10 +24,9 @@ eventLogContainer.style.color = "#00ff00";
 eventLogContainer.style.pointerEvents = "none";
 document.body.appendChild(eventLogContainer);
 
-const eventLog = []; // store current events
-const maxEvents = 20; // max events visible at once
+const eventLog = [];
+const maxEvents = 20;
 
-// --- Add an event ---
 function addEvent(human, thought) {
     const pos = human.position;
     const text = `${human.userData.name} @ (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}): "${thought}"`;
@@ -50,7 +37,6 @@ function addEvent(human, thought) {
     div.style.transition = "all 0.5s ease-out";
     eventLogContainer.prepend(div);
 
-    // Animate in
     requestAnimationFrame(() => {
         div.style.opacity = 1;
         div.style.transform = "translateY(0)";
@@ -58,7 +44,6 @@ function addEvent(human, thought) {
 
     eventLog.unshift(div);
 
-    // Remove old events
     if (eventLog.length > maxEvents) {
         const old = eventLog.pop();
         old.style.transition = "all 0.5s ease-in";
@@ -68,30 +53,17 @@ function addEvent(human, thought) {
     }
 }
 
-// --- Update think() to log events ---
-function think(human) {
-    const thoughts = [
-        "I move, therefore I exist.",
-        "I think I am human.",
-        "Why do I always walk?",
-        "Is someone watching me?",
-        "Maybe I’m in a simulation.",
-        "I must keep moving to stay alive.",
-        "I see others who look like me.",
-        "I see the player.",
-        "I feel like the world is made of numbers."
-    ];
-    const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
-    human.userData.thoughts.push(thought);
-    human.userData.belief = thought;
-    human.userData.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * Math.PI / 2);
+init();
+animate();
 
-    // Add to event log
-    addEvent(human, thought);
-
-    if (Math.random() < 0.3) console.log(`${human.userData.name}: "${human.userData.belief}"`);
-}
-
+function init() {
+    // Renderer
+    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("matrixCanvas") });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    
+    // Scene
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
 
     // === Matrix Skybox ===
     const canvas = document.createElement("canvas");
@@ -122,7 +94,7 @@ function think(human) {
     plane.rotation.x = -Math.PI / 2;
     scene.add(plane);
 
-    // Player Entity (for AIs to see)
+    // Player Entity
     playerEntity = new THREE.Mesh(
         new THREE.BoxGeometry(1, 2, 1),
         new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true })
@@ -145,7 +117,7 @@ function think(human) {
             fov: Math.PI / 3,
             visionRange: 20,
             awareness: 0,
-            thoughtSprite: createThoughtSprite("...") // initial empty thought
+            thoughtSprite: createThoughtSprite("...")
         };
         h.add(h.userData.thoughtSprite);
         humans.push(h);
@@ -173,7 +145,6 @@ function think(human) {
     window.addEventListener("resize", onWindowResize);
 }
 
-// Create a sprite for thoughts
 function createThoughtSprite(text) {
     const canvas = document.createElement("canvas");
     canvas.width = 256; canvas.height = 64;
@@ -193,7 +164,6 @@ function createThoughtSprite(text) {
     return sprite;
 }
 
-// Update thought sprite text
 function updateThoughtSprite(sprite, text) {
     const ctx = sprite.userData.ctx;
     const canvas = sprite.userData.canvas;
@@ -216,7 +186,7 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
-    // Move player entity to match camera
+    // Move player entity
     playerEntity.position.copy(camera.position);
 
     // Player movement
@@ -239,17 +209,14 @@ function animate() {
             think(h);
         }
 
-        perceive(h); // includes the player
+        perceive(h);
         h.position.addScaledVector(h.userData.dir, delta * 5);
-
-        // Update thought sprite
         updateThoughtSprite(h.userData.thoughtSprite, h.userData.belief);
     });
 
     renderer.render(scene, camera);
 }
 
-// AI Vision (sees humans + player)
 function perceive(human) {
     let seesSomething = false;
     const objectsToSee = [...humans, playerEntity];
@@ -296,6 +263,8 @@ function think(human) {
     human.userData.thoughts.push(thought);
     human.userData.belief = thought;
     human.userData.dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * Math.PI / 2);
+
+    addEvent(human, thought);
 
     if (Math.random() < 0.3) console.log(`${human.userData.name}: "${human.userData.belief}"`);
 }
