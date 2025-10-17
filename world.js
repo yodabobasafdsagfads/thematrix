@@ -3,12 +3,10 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.m
 let scene, camera, renderer;
 let humans = [];
 let keys = {};
-let velocity = new THREE.Vector3();
 let clock = new THREE.Clock();
-
-let yaw = 0; // camera rotation
-let pitch = 0;
+let yaw = 0, pitch = 0;
 let isPointerLocked = false;
+const raycaster = new THREE.Raycaster();
 
 init();
 animate();
@@ -51,9 +49,8 @@ function init() {
 
   // Humans (cubes)
   const geo = new THREE.BoxGeometry(1, 2, 1);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true });
-
   for (let i = 0; i < 20; i++) {
+    const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true });
     const h = new THREE.Mesh(geo, mat);
     h.position.set((Math.random() - 0.5) * 100, 1, (Math.random() - 0.5) * 100);
     h.userData = {
@@ -61,7 +58,10 @@ function init() {
       dir: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
       belief: "I am a human being.",
       thoughts: [],
-      timer: 0
+      timer: 0,
+      fov: Math.PI / 3, // 60-degree field of view
+      visionRange: 20,
+      awareness: 0
     };
     humans.push(h);
     scene.add(h);
@@ -117,17 +117,53 @@ function animate() {
   move.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   camera.position.addScaledVector(move, speed);
 
-  // AI: update "thoughts" and movement
+  // AI: thinking, movement, and sight
   humans.forEach(h => {
     h.userData.timer += delta;
     if (h.userData.timer > 2) {
       h.userData.timer = 0;
       think(h);
     }
+
+    perceive(h);
     h.position.addScaledVector(h.userData.dir, delta * 5);
   });
 
   renderer.render(scene, camera);
+}
+
+// === AI VISION ===
+function perceive(human) {
+  let seesSomething = false;
+
+  humans.forEach(other => {
+    if (other === human) return;
+    const dirToOther = new THREE.Vector3().subVectors(other.position, human.position);
+    const dist = dirToOther.length();
+    if (dist > human.userData.visionRange) return;
+
+    dirToOther.normalize();
+    const angle = human.userData.dir.angleTo(dirToOther);
+    if (angle < human.userData.fov / 2) {
+      // Use raycasting for line of sight
+      raycaster.set(human.position, dirToOther);
+      const hits = raycaster.intersectObjects(humans, false);
+      if (hits.length && hits[0].object === other) {
+        seesSomething = true;
+        human.userData.awareness = Math.min(human.userData.awareness + 0.1, 1);
+        human.material.color.setHSL(0.4, 1, 0.5 + 0.5 * human.userData.awareness);
+        if (Math.random() < 0.1) {
+          console.log(`${human.userData.name}: "I see ${other.userData.name}."`);
+        }
+      }
+    }
+  });
+
+  // If sees nothing, awareness fades
+  if (!seesSomething) {
+    human.userData.awareness = Math.max(0, human.userData.awareness - 0.05);
+    human.material.color.setHSL(0.4, 1, 0.3 + 0.5 * human.userData.awareness);
+  }
 }
 
 function think(human) {
@@ -137,7 +173,9 @@ function think(human) {
     "Why do I always walk?",
     "Is someone watching me?",
     "Maybe I’m in a simulation.",
-    "I must keep moving to stay alive."
+    "I must keep moving to stay alive.",
+    "I see others who look like me.",
+    "I feel like the world is made of numbers."
   ];
   const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
   human.userData.thoughts.push(thought);
